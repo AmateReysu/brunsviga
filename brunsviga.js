@@ -953,6 +953,7 @@ class Brunsviga {
         const integerDigits = parts[0].replace(/[^0-9]/g, '') || '0';
         const fractionalDigits = parts[1] ? parts[1].replace(/[^0-9]/g, '') : '';
 
+        // Zweiergruppen bilden vom Komma aus
         const intGroups = [];
         for (let i = integerDigits.length; i > 0; i -= 2) {
             const start = Math.max(0, i - 2);
@@ -977,6 +978,7 @@ class Brunsviga {
         const totalGroups = intGroups.concat(fracGroups.slice(0, decimalPlaces));
         const integerGroupCount = intGroups.length;
 
+        // Berechne die Wurzel und sammle Details für jeden Schritt
         let remainder = 0n;
         let partialRoot = 0n;
         const stageDetails = [];
@@ -990,6 +992,7 @@ class Brunsviga {
             const oddNumbers = [];
             let digit = 0;
 
+            // Subtrahiere aufeinanderfolgende ungerade Zahlen
             while (odd <= remainder && digit < 9) {
                 remainder -= odd;
                 oddNumbers.push(odd);
@@ -998,8 +1001,7 @@ class Brunsviga {
             }
 
             const attemptedOdd = odd;
-            const digitBigInt = BigInt(digit);
-            partialRoot = partialRoot * 10n + digitBigInt;
+            partialRoot = partialRoot * 10n + BigInt(digit);
             rootDigits.push(digit);
 
             stageDetails.push({
@@ -1009,7 +1011,8 @@ class Brunsviga {
                 attemptedOdd,
                 digit,
                 partialRoot,
-                remainder
+                remainder,
+                remainderBeforeGroup: remainder + oddNumbers.reduce((sum, n) => sum + n, 0n)
             });
         });
 
@@ -1030,113 +1033,153 @@ class Brunsviga {
 
         const groupDisplay = `${intGroups.join(' | ')}${decimalPlaces > 0 ? ' · ' + fracGroups.slice(0, decimalPlaces).join(' | ') : ''}`;
 
+        // Erstelle die Algorithmus-Schritte
         this.algorithmSteps = [];
-        this.algorithmSteps.push({ action: 'clearAll', description: 'Alle Register löschen' });
-        this.algorithmSteps.push({ action: 'note', description: `Radikand ${normalized.replace('.', ',')} vorbereiten und vom Komma aus Zweiergruppen bilden: ${groupDisplay}` });
 
-        // Initial setup: set radicand in result register
-        const radicandIntValue = parseInt(integerDigits + fractionalDigits.slice(0, decimalPlaces).padEnd(decimalPlaces, '0'), 10);
+        // 1. Initialisierung
+        this.algorithmSteps.push({
+            action: 'clearAll',
+            description: 'Alle Register löschen'
+        });
+
+        this.algorithmSteps.push({
+            action: 'note',
+            description: `Radikand ${normalized.replace('.', ',')} in Zweiergruppen: ${groupDisplay}`
+        });
+
+        // 2. Radikand im Resultatwerk einstellen
+        const radicandForDisplay = integerDigits + fractionalDigits.slice(0, decimalPlaces).padEnd(decimalPlaces, '0');
+        const radicandIntValue = parseInt(radicandForDisplay, 10);
+
         this.algorithmSteps.push({
             action: 'setResultDirect',
             value: radicandIntValue,
-            description: `Radikand im Resultatwerk einstellen`
+            description: `Radikand ${radicandForDisplay} im Resultatwerk einstellen`
         });
 
-        this.algorithmSteps.push({ action: 'clearRevolution', description: 'Umdrehungszähler zurücksetzen' });
+        this.algorithmSteps.push({
+            action: 'clearRevolution',
+            description: 'Umdrehungszähler auf 0 setzen'
+        });
 
-        // Starting carriage position for root extraction (no initial movement)
-        let currentCarriage = 0;
-
+        // 3. Für jede Gruppe die Wurzelziffer berechnen
         stageDetails.forEach((detail, stageIndex) => {
             const isDecimal = stageIndex >= integerGroupCount;
-            const oddSequence = detail.oddNumbers.map(n => n.toString()).join(', ');
-            const overshoot = detail.attemptedOdd.toString();
+            const decimalIndex = stageIndex - integerGroupCount + 1;
             const digitsProcessed = stageIndex + 1;
             const decimalDigitsSoFar = Math.max(0, digitsProcessed - integerGroupCount);
             const integerDigitsSoFar = digitsProcessed - decimalDigitsSoFar;
+
+            // Formatierte Teilwurzel
             const paddedPartial = detail.partialRoot.toString().padStart(digitsProcessed, '0');
             const partialIntPart = paddedPartial.slice(0, integerDigitsSoFar) || '0';
             const partialFracPart = decimalDigitsSoFar > 0 ? paddedPartial.slice(integerDigitsSoFar).padEnd(decimalDigitsSoFar, '0') : '';
             const partialRootFormatted = decimalDigitsSoFar > 0 ? `${partialIntPart},${partialFracPart}` : partialIntPart;
 
-            let doubleFormatted;
-            if (decimalDigitsSoFar === 0) {
-                doubleFormatted = (detail.partialRoot * 2n).toString();
-            } else {
-                const doubleRaw = (detail.partialRoot * 2n).toString();
-                const paddedDouble = doubleRaw.padStart(integerDigitsSoFar + decimalDigitsSoFar, '0');
-                const doubleIntPart = paddedDouble.slice(0, integerDigitsSoFar) || '0';
-                const doubleFracPart = paddedDouble.slice(integerDigitsSoFar).padEnd(decimalDigitsSoFar, '0');
-                doubleFormatted = `${doubleIntPart},${doubleFracPart}`;
-            }
+            // Gruppenverarbeitung
+            this.algorithmSteps.push({
+                action: 'note',
+                description: `─────────────────────────────────`
+            });
 
             this.algorithmSteps.push({
                 action: 'note',
-                description: `Gruppe ${detail.group} verarbeiten${isDecimal ? ' (Dezimalstelle)' : ''}`
+                description: `Gruppe ${stageIndex + 1}: ${detail.group}${isDecimal ? ` (Dezimalstelle ${decimalIndex})` : ''}`
             });
 
-            // Set the sequence of odd numbers in input register
-            if (detail.digit > 0) {
-                // For each odd number in the sequence, set it in input and crank backward
+            if (detail.digit === 0) {
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Keine Subtraktion möglich → Wurzelziffer = 0`
+                });
+
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Rest: ${detail.remainder.toString()}`
+                });
+            } else {
+                // Zeige die Sequenz der ungeraden Zahlen
+                const oddSequence = detail.oddNumbers.map(n => n.toString()).join(', ');
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Ungerade Zahlenfolge: ${oddSequence}`
+                });
+
+                // Für jede ungerade Zahl: im Einstellwerk einstellen und subtrahieren
                 detail.oddNumbers.forEach((oddNum, oddIndex) => {
                     const oddValue = parseInt(oddNum.toString(), 10);
+
                     this.algorithmSteps.push({
                         action: 'setInput',
                         value: oddValue,
-                        description: `Ungerade Zahl ${oddNum.toString()} im Einstellwerk einstellen`
+                        description: `${oddNum.toString()} im Einstellwerk`
                     });
 
                     this.algorithmSteps.push({
                         action: 'crank',
                         direction: -1,
-                        description: `Kurbel rückwärts drehen (${oddIndex + 1}/${detail.oddNumbers.length}) - Zahl ${oddNum.toString()} abziehen`
+                        description: `Kurbel rückwärts → ${oddNum.toString()} subtrahieren (${oddIndex + 1}/${detail.digit})`
                     });
                 });
 
                 this.algorithmSteps.push({
                     action: 'note',
-                    description: `Klingelzeichen bei ${overshoot} erreicht - ${detail.digit} erfolgreiche Rückwärtsdrehungen. Teilwurzel: ${partialRootFormatted}`
+                    description: `Klingelzeichen bei ${detail.attemptedOdd.toString()} (passt nicht mehr)`
                 });
-            } else {
+
                 this.algorithmSteps.push({
                     action: 'note',
-                    description: `Keine ungerade Zahl passt – Ergebnisziffer 0, Rest ${detail.remainder.toString()}`
+                    description: `Wurzelziffer = ${detail.digit} (Anzahl Subtraktionen)`
+                });
+
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Teilwurzel: ${partialRootFormatted}, Rest: ${detail.remainder.toString()}`
                 });
             }
 
-            this.algorithmSteps.push({
-                action: 'note',
-                description: `Doppelte Wurzel für die nächste Gruppe: ${doubleFormatted}`
-            });
-
-            // Move carriage left for next group
+            // Zeige die doppelte Wurzel für die nächste Gruppe
             if (stageIndex < stageDetails.length - 1) {
-                const targetPosition = currentCarriage - 1;
-                const { steps: moveSteps } = this.createCarriageMovementSteps(currentCarriage, targetPosition);
-                moveSteps.forEach(step => this.algorithmSteps.push(step));
-                currentCarriage = targetPosition;
+                const doubleRoot = detail.partialRoot * 2n;
+                const nextBase = doubleRoot * 10n + 1n;
+
+                let doubleFormatted;
+                if (decimalDigitsSoFar === 0) {
+                    doubleFormatted = doubleRoot.toString();
+                } else {
+                    const doubleRaw = doubleRoot.toString();
+                    const paddedDouble = doubleRaw.padStart(integerDigitsSoFar + decimalDigitsSoFar, '0');
+                    const doubleIntPart = paddedDouble.slice(0, integerDigitsSoFar) || '0';
+                    const doubleFracPart = paddedDouble.slice(integerDigitsSoFar).padEnd(decimalDigitsSoFar, '0');
+                    doubleFormatted = `${doubleIntPart},${doubleFracPart}`;
+                }
+
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Nächste Basis: 2×${partialRootFormatted} = ${doubleFormatted}, erste ungerade Zahl: ${nextBase.toString()}`
+                });
             }
         });
 
-        // Move carriage back to center
-        if (currentCarriage !== 0) {
-            const { steps: moveBackSteps } = this.createCarriageMovementSteps(currentCarriage, 0);
-            moveBackSteps.forEach(step => this.algorithmSteps.push(step));
-        }
-
+        // 4. Zusammenfassung
         this.algorithmSteps.push({
             action: 'note',
-            description: `Wurzel im Umdrehungszähler: ${rootValue.toFixed(decimalPlaces).replace('.', ',')}`
+            description: `─────────────────────────────────`
         });
 
         this.algorithmSteps.push({
             action: 'note',
-            description: `Quadrat der ermittelten Wurzel: ${(rootValue * rootValue).toFixed(decimalPlaces).replace('.', ',')} – Rest ${remainderValue.toFixed(decimalPlaces).replace('.', ',')}`
+            description: `Ergebnis im Umdrehungszähler: ${rootValue.toFixed(decimalPlaces).replace('.', ',')}`
+        });
+
+        this.algorithmSteps.push({
+            action: 'note',
+            description: `Restlicher Wert im Resultatwerk: ${remainderValue.toFixed(decimalPlaces).replace('.', ',')}`
         });
 
         this.algorithmSteps.push({
             action: 'complete',
-            description: `√${normalized.replace('.', ',')} = ${rootValue.toFixed(decimalPlaces).replace('.', ',')} (Rest ${remainderValue.toFixed(decimalPlaces).replace('.', ',')})`
+            description: `√${normalized.replace('.', ',')} = ${rootValue.toFixed(decimalPlaces).replace('.', ',')} (Rest: ${remainderValue.toFixed(decimalPlaces).replace('.', ',')})`
         });
 
         this.prepareAlgorithm();
