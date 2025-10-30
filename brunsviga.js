@@ -955,34 +955,39 @@ class Brunsviga {
         });
 
         // Berechne die Wurzel Gruppe für Gruppe
-        // Der Carriage bleibt auf Position 0, die Position im Einstellwerk bestimmt die Magnitude
-        let remainder = BigInt(radicand);
+        let currentResult = BigInt(radicand);
         let partialRoot = 0n;
+        let currentCarriage = 0;
 
         groups.forEach((groupStr, groupIndex) => {
             // Berechne die benötigte Position im Einstellwerk für diese Gruppe
-            // verbleibende Gruppen = n - groupIndex - 1
-            // Die niederwertigste Stelle soll an Position: 12 - (2 × verbleibende_Gruppen)
+            // Mit Carriage c wirkt Einstellwerk[p] auf Resultatwerk[p + c]
+            // Wir wollen auf Resultatwerk[12 - 2*verbleibende_Gruppen] wirken
+            // Also: p = 12 - 2*verbleibende_Gruppen - c
             const remainingGroups = groups.length - groupIndex - 1;
-            const inputPosition = 12 - (2 * remainingGroups);
+            const inputPosition = 12 - (2 * remainingGroups) - currentCarriage;
 
             const base = partialRoot * 20n;
-            let odd = base + 1n;
             let successfulSubtractions = 0;
             const oddSubtracted = [];
 
             this.algorithmSteps.push({
                 action: 'note',
-                description: `Gruppe ${groupIndex + 1} (${groupStr}): Beginnend mit ungerader Zahl ${odd}, Einstellwerk-Position ${inputPosition} (Magnitude 10^${2 * remainingGroups})`
+                description: `Gruppe ${groupIndex + 1} (${groupStr}): Carriage=${currentCarriage}, Einstellwerk-Position ${inputPosition}, beginnend mit ungerader Zahl ${base + 1n}`
             });
 
             // Probiere ungerade Zahlen nacheinander
-            while (successfulSubtractions < 9) {
-                const oddNumber = odd + BigInt(successfulSubtractions * 2);
+            let subtractionsInGroup = 0;
+            while (subtractionsInGroup < 9) {
+                const oddNumber = base + BigInt(2 * subtractionsInGroup + 1);
 
-                // Teste, ob Subtraktion möglich ist
-                if (remainder < oddNumber) {
-                    // Klingelzeichen - diese Zahl passt nicht mehr
+                // Berechne was passieren würde bei dieser Subtraktion
+                const magnitudeFactor = BigInt(10 ** (2 * remainingGroups));
+                const wouldSubtract = oddNumber * magnitudeFactor;
+
+                // Teste, ob Subtraktion zu Unterlauf führt
+                if (currentResult < wouldSubtract) {
+                    // Klingelzeichen - Unterlauf!
                     this.algorithmSteps.push({
                         action: 'setInputAtPosition',
                         value: Number(oddNumber),
@@ -992,19 +997,30 @@ class Brunsviga {
                     this.algorithmSteps.push({
                         action: 'crank',
                         direction: -1,
-                        description: `Kurbel rückwärts drehen - Klingelzeichen! ${oddNumber} passt nicht (würde negativ)`
+                        description: `Kurbel rückwärts drehen - Klingelzeichen! Unterlauf erkannt (${wouldSubtract} > ${currentResult})`
                     });
                     this.algorithmSteps.push({
                         action: 'crank',
                         direction: 1,
-                        description: `Kurbel vorwärts drehen zur Korrektur (Resultat darf nicht negativ bleiben)`
+                        description: `Kurbel vorwärts drehen zur Korrektur`
                     });
+
+                    // Nach Unterlauf: Carriage nach rechts für nächste Gruppe
+                    if (groupIndex < groups.length - 1) {
+                        this.algorithmSteps.push({
+                            action: 'moveCarriage',
+                            direction: -1,
+                            description: `Schlitten nach rechts auf Position ${currentCarriage - 1} verschieben`
+                        });
+                        currentCarriage -= 1;
+                    }
                     break;
                 }
 
-                // Subtraktion durchführen
+                // Subtraktion erfolgreich
                 oddSubtracted.push(oddNumber);
-                remainder -= oddNumber;
+                currentResult -= wouldSubtract;
+                subtractionsInGroup++;
                 successfulSubtractions++;
 
                 this.algorithmSteps.push({
@@ -1016,7 +1032,7 @@ class Brunsviga {
                 this.algorithmSteps.push({
                     action: 'crank',
                     direction: -1,
-                    description: `Kurbel rückwärts drehen: ${oddNumber} abziehen (Subtraktion ${successfulSubtractions})`
+                    description: `Kurbel rückwärts drehen: ${oddNumber}×10^${2 * remainingGroups} = ${wouldSubtract} abziehen (Subtraktion ${subtractionsInGroup})`
                 });
             }
 
@@ -1025,13 +1041,22 @@ class Brunsviga {
             if (successfulSubtractions === 0) {
                 this.algorithmSteps.push({
                     action: 'note',
-                    description: `Gruppe ${groupIndex + 1}: Keine ungerade Zahl passte - Wurzelziffer ist 0`
+                    description: `Gruppe ${groupIndex + 1}: Sofortiger Unterlauf - Wurzelziffer ist 0`
                 });
+                // Auch hier Carriage verschieben für nächste Gruppe
+                if (groupIndex < groups.length - 1) {
+                    this.algorithmSteps.push({
+                        action: 'moveCarriage',
+                        direction: -1,
+                        description: `Schlitten nach rechts auf Position ${currentCarriage - 1} verschieben`
+                    });
+                    currentCarriage -= 1;
+                }
             } else {
                 const subtractedList = oddSubtracted.map(n => n.toString()).join(', ');
                 this.algorithmSteps.push({
                     action: 'note',
-                    description: `Gruppe ${groupIndex + 1} abgeschlossen: ${successfulSubtractions} erfolgreiche Subtraktionen (${subtractedList}). Teilwurzel: ${partialRoot}, Rest: ${remainder}`
+                    description: `Gruppe ${groupIndex + 1} abgeschlossen: ${successfulSubtractions} erfolgreiche Subtraktionen (${subtractedList}). Teilwurzel: ${partialRoot}, Rest: ${currentResult}`
                 });
             }
 
@@ -1044,8 +1069,14 @@ class Brunsviga {
             }
         });
 
+        // Carriage zurück auf Position 0
+        if (currentCarriage !== 0) {
+            const { steps } = this.createCarriageMovementSteps(currentCarriage, 0);
+            steps.forEach(step => this.algorithmSteps.push(step));
+        }
+
         const rootValue = Number(partialRoot);
-        const remainderValue = Number(remainder);
+        const remainderValue = Number(currentResult);
 
         this.algorithmSteps.push({
             action: 'complete',
