@@ -1044,16 +1044,8 @@ class Brunsviga {
 
         this.algorithmSteps.push({ action: 'clearRevolution', description: 'Umdrehungszähler zurücksetzen' });
 
-        // Starting carriage position for root extraction
-        const startingPosition = integerGroupCount - 1;
+        // Starting carriage position for root extraction (no initial movement)
         let currentCarriage = 0;
-
-        // Move to starting position if needed
-        if (startingPosition !== 0) {
-            const { steps: initialMoveSteps } = this.createCarriageMovementSteps(0, startingPosition);
-            initialMoveSteps.forEach(step => this.algorithmSteps.push(step));
-            currentCarriage = startingPosition;
-        }
 
         stageDetails.forEach((detail, stageIndex) => {
             const isDecimal = stageIndex >= integerGroupCount;
