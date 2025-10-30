@@ -162,9 +162,10 @@ class Brunsviga {
 
     updateRevolutionCounter(direction) {
         // Position-aware counter: updates the digit corresponding to carriage position
-        // Maps carriage position to revolution counter index: 4 - carriagePosition
+        // Maps carriage position to revolution counter index: carriagePosition + 3
+        // Moving carriage left (increasing position) moves counter right (increasing index)
         // This allows positions from -3 to +4 to map to indices 0 to 7
-        const revolutionIndex = 4 - this.carriagePosition;
+        const revolutionIndex = this.carriagePosition + 3;
 
         if (revolutionIndex >= 0 && revolutionIndex < 8) {
             // Convert array to number, apply operation, convert back
