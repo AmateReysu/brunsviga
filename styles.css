@@ -110,6 +110,12 @@ h3 {
     transform: scale(1.1);
 }
 
+.counter .digit.negative {
+    color: #ff0000;
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5),
+                0 2px 5px rgba(255, 0, 0, 0.2);
+}
+
 .counter .digit.decimal-marker::after {
     content: '.';
     position: absolute;
