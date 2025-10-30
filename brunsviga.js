@@ -46,8 +46,8 @@ class Brunsviga {
         document.getElementById('clear-input').addEventListener('click', () => this.clearInput());
         
         // Carriage controls
-        document.getElementById('carriage-left').addEventListener('click', () => this.moveCarriage(-1));
-        document.getElementById('carriage-right').addEventListener('click', () => this.moveCarriage(1));
+        document.getElementById('carriage-left').addEventListener('click', () => this.moveCarriage(1));
+        document.getElementById('carriage-right').addEventListener('click', () => this.moveCarriage(-1));
         
         // Crank controls
         document.getElementById('crank-forward').addEventListener('click', () => this.crankTurn(1));
