@@ -262,100 +262,204 @@ class Brunsviga {
         this.elements.statusDisplay.textContent = message;
     }
 
+    createCarriageMovementSteps(currentPosition, targetPosition) {
+        const steps = [];
+        let position = currentPosition;
+
+        while (position !== targetPosition) {
+            const direction = targetPosition > position ? 1 : -1;
+            position += direction;
+            steps.push({
+                action: 'moveCarriage',
+                direction,
+                description: `Schlitten ${direction > 0 ? 'nach rechts' : 'nach links'} auf Position ${position} verschieben`
+            });
+        }
+
+        return { steps, finalPosition: position };
+    }
+
     // Algorithm execution
     startAddition() {
-        const a = parseInt(document.getElementById('operand-a').value) || 0;
-        const b = parseInt(document.getElementById('operand-b').value) || 0;
-        
+        const a = parseInt(document.getElementById('operand-a').value, 10);
+        const b = parseInt(document.getElementById('operand-b').value, 10);
+
+        if (!Number.isInteger(a) || a < 0 || !Number.isInteger(b) || b < 0) {
+            this.setStatus('Bitte nur nichtnegative ganze Zahlen für die Addition verwenden.');
+            return;
+        }
+
         this.algorithmSteps = [
             { action: 'clearAll', description: 'Alle Register löschen' },
-            { action: 'setInput', value: a, description: `Operand A (${a}) im Einstellwerk einstellen` },
-            { action: 'crank', direction: 1, description: 'Kurbel vorwärts drehen (addieren)' },
-            { action: 'setInput', value: b, description: `Operand B (${b}) im Einstellwerk einstellen` },
-            { action: 'crank', direction: 1, description: 'Kurbel vorwärts drehen (addieren)' },
+            { action: 'setInput', value: a, description: `Ersten Summanden (${a}) im Einstellwerk einstellen` },
+            { action: 'crank', direction: 1, description: 'Kurbel vorwärts drehen, um den ersten Summanden in das Resultatwerk zu übertragen' },
+            { action: 'setInput', value: b, description: `Zweiten Summanden (${b}) im Einstellwerk einstellen` },
+            { action: 'crank', direction: 1, description: 'Kurbel vorwärts drehen, um den zweiten Summanden hinzuzufügen' },
             { action: 'complete', description: `Ergebnis: ${a + b}` }
         ];
-        
+
         this.prepareAlgorithm();
     }
 
     startSubtraction() {
-        const a = parseInt(document.getElementById('operand-a').value) || 0;
-        const b = parseInt(document.getElementById('operand-b').value) || 0;
-        
+        const a = parseInt(document.getElementById('operand-a').value, 10);
+        const b = parseInt(document.getElementById('operand-b').value, 10);
+
+        if (!Number.isInteger(a) || a < 0 || !Number.isInteger(b) || b < 0) {
+            this.setStatus('Bitte nur nichtnegative ganze Zahlen für die Subtraktion verwenden.');
+            return;
+        }
+
+        if (a < b) {
+            this.setStatus('Für diese Maschine muss der Minuend größer oder gleich dem Subtrahenden sein.');
+            return;
+        }
+
         this.algorithmSteps = [
             { action: 'clearAll', description: 'Alle Register löschen' },
-            { action: 'setInput', value: a, description: `Operand A (${a}) im Einstellwerk einstellen` },
-            { action: 'crank', direction: 1, description: 'Kurbel vorwärts drehen (addieren)' },
-            { action: 'setInput', value: b, description: `Operand B (${b}) im Einstellwerk einstellen` },
-            { action: 'crank', direction: -1, description: 'Kurbel rückwärts drehen (subtrahieren)' },
+            { action: 'setInput', value: a, description: `Minuend (${a}) im Einstellwerk einstellen` },
+            { action: 'crank', direction: 1, description: 'Kurbel vorwärts drehen, um den Minuenden in das Resultatwerk zu übertragen' },
+            { action: 'setInput', value: b, description: `Subtrahend (${b}) im Einstellwerk einstellen` },
+            { action: 'crank', direction: -1, description: 'Kurbel rückwärts drehen, um den Subtrahenden abzuziehen' },
             { action: 'complete', description: `Ergebnis: ${a - b}` }
         ];
-        
+
         this.prepareAlgorithm();
     }
 
     startMultiplication() {
-        const a = parseInt(document.getElementById('operand-a').value) || 0;
-        const b = parseInt(document.getElementById('operand-b').value) || 0;
-        
-        this.algorithmSteps = [
-            { action: 'clearAll', description: 'Alle Register löschen' }
-        ];
-        
-        if (b === 0) {
-            this.algorithmSteps.push({ action: 'complete', description: `Ergebnis: 0` });
-        } else {
-            this.algorithmSteps.push({ action: 'setInput', value: a, description: `Multiplikator (${a}) im Einstellwerk einstellen` });
-            
-            for (let i = 0; i < Math.abs(b); i++) {
-                this.algorithmSteps.push({
-                    action: 'crank',
-                    direction: b > 0 ? 1 : -1,
-                    description: `Kurbel ${b > 0 ? 'vorwärts' : 'rückwärts'} drehen (${i + 1}/${Math.abs(b)})`
-                });
-            }
-            
-            this.algorithmSteps.push({ action: 'complete', description: `Ergebnis: ${a * b}` });
+        const multiplicand = parseInt(document.getElementById('operand-a').value, 10);
+        const multiplier = parseInt(document.getElementById('operand-b').value, 10);
+
+        if (!Number.isInteger(multiplicand) || multiplicand < 0 || !Number.isInteger(multiplier) || multiplier < 0) {
+            this.setStatus('Bitte nur nichtnegative ganze Zahlen für die Multiplikation verwenden.');
+            return;
         }
-        
+
+        const multiplierDigits = Math.abs(multiplier).toString().split('').map(Number).reverse();
+        let currentCarriage = 0;
+
+        this.algorithmSteps = [
+            { action: 'clearAll', description: 'Alle Register löschen' },
+            { action: 'setInput', value: multiplicand, description: `Multiplikand (${multiplicand}) im Einstellwerk einstellen` }
+        ];
+
+        multiplierDigits.forEach((digit, index) => {
+            const targetPosition = -index;
+            const { steps, finalPosition } = this.createCarriageMovementSteps(currentCarriage, targetPosition);
+            steps.forEach(step => this.algorithmSteps.push(step));
+            currentCarriage = finalPosition;
+
+            if (digit === 0) {
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Teilprodukt ${index + 1}: Ziffer 0 - keine Kurbelumdrehung erforderlich`
+                });
+            } else {
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Teilprodukt ${index + 1}: Ziffer ${digit} bei Schlittenposition ${currentCarriage}`
+                });
+
+                for (let turn = 0; turn < digit; turn++) {
+                    this.algorithmSteps.push({
+                        action: 'crank',
+                        direction: 1,
+                        description: `Kurbel vorwärts drehen (${turn + 1}/${digit}) für diese Ziffer`
+                    });
+                }
+            }
+        });
+
+        if (currentCarriage !== 0) {
+            const { steps } = this.createCarriageMovementSteps(currentCarriage, 0);
+            steps.forEach(step => this.algorithmSteps.push(step));
+        }
+
+        this.algorithmSteps.push({ action: 'complete', description: `Ergebnis: ${multiplicand * multiplier}` });
+
         this.prepareAlgorithm();
     }
 
     startDivision() {
-        const dividend = parseInt(document.getElementById('operand-a').value) || 0;
-        const divisor = parseInt(document.getElementById('operand-b').value) || 0;
-        
-        if (divisor === 0) {
-            this.setStatus('Division durch Null nicht möglich!');
+        const dividend = parseInt(document.getElementById('operand-a').value, 10);
+        const divisor = parseInt(document.getElementById('operand-b').value, 10);
+
+        if (!Number.isInteger(dividend) || dividend < 0 || !Number.isInteger(divisor) || divisor <= 0) {
+            this.setStatus('Bitte einen nichtnegativen Dividend und einen positiven ganzzahligen Divisor eingeben.');
             return;
         }
-        
+
         this.algorithmSteps = [
             { action: 'clearAll', description: 'Alle Register löschen' },
-            { action: 'setInput', value: dividend, description: `Dividend (${dividend}) im Resultatwerk` },
-            { action: 'setResultDirect', value: dividend, description: `Dividend (${dividend}) direkt ins Resultatwerk` },
+            { action: 'setResultDirect', value: dividend, description: `Dividend (${dividend}) im Resultatwerk einstellen` },
             { action: 'setInput', value: divisor, description: `Divisor (${divisor}) im Einstellwerk einstellen` }
         ];
-        
+
+        const dividendDigits = dividend === 0 ? 1 : dividend.toString().length;
+        const divisorDigits = divisor.toString().length;
+        let positionShift = Math.max(0, dividendDigits - divisorDigits);
+        let currentCarriage = 0;
         let remaining = dividend;
-        let quotient = 0;
-        
-        while (remaining >= divisor) {
-            this.algorithmSteps.push({
-                action: 'crank',
-                direction: -1,
-                description: `Subtrahiere ${divisor} (Quotient: ${quotient + 1})`
-            });
-            remaining -= divisor;
-            quotient++;
+        const quotientDigits = [];
+
+        if (positionShift > 0) {
+            const { steps, finalPosition } = this.createCarriageMovementSteps(currentCarriage, -positionShift);
+            steps.forEach(step => this.algorithmSteps.push(step));
+            currentCarriage = finalPosition;
         }
-        
-        this.algorithmSteps.push({ 
-            action: 'complete', 
-            description: `Ergebnis: Quotient=${quotient}, Rest=${remaining}` 
+
+        for (let position = positionShift; position >= 0; position--) {
+            const divisorFactor = divisor * Math.pow(10, position);
+            let digit = 0;
+
+            if (divisorFactor !== 0) {
+                digit = Math.min(9, Math.floor(remaining / divisorFactor));
+            }
+
+            quotientDigits.push(digit);
+
+            if (digit === 0) {
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Divisionsstelle ${positionShift - position + 1}: Divisor passt 0-mal`
+                });
+            } else {
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Divisionsstelle ${positionShift - position + 1}: ${digit}×${divisor}·10^${position} subtrahieren`
+                });
+
+                for (let turn = 0; turn < digit; turn++) {
+                    this.algorithmSteps.push({
+                        action: 'crank',
+                        direction: -1,
+                        description: `Kurbel rückwärts drehen (${turn + 1}/${digit}) an dieser Stelle`
+                    });
+                }
+
+                remaining -= digit * divisorFactor;
+            }
+
+            if (position > 0) {
+                const { steps, finalPosition } = this.createCarriageMovementSteps(currentCarriage, currentCarriage + 1);
+                steps.forEach(step => this.algorithmSteps.push(step));
+                currentCarriage = finalPosition;
+            }
+        }
+
+        if (currentCarriage !== 0) {
+            const { steps } = this.createCarriageMovementSteps(currentCarriage, 0);
+            steps.forEach(step => this.algorithmSteps.push(step));
+        }
+
+        const quotient = parseInt(quotientDigits.join(''), 10) || 0;
+
+        this.algorithmSteps.push({
+            action: 'complete',
+            description: `Ergebnis: Quotient=${quotient}, Rest=${remaining}`
         });
-        
+
         this.prepareAlgorithm();
     }
 
