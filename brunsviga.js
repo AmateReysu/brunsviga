@@ -10,6 +10,7 @@ class Brunsviga {
         this.revolutionCounter = new Array(8).fill(0);
         this.inputRegister = new Array(13).fill(0);
         this.carriagePosition = 0;
+        this.resultDecimalPosition = null;
         
         // Algorithm execution state
         this.algorithmSteps = [];
@@ -85,6 +86,8 @@ class Brunsviga {
         document.getElementById('algo-subtract').addEventListener('click', () => this.startSubtraction());
         document.getElementById('algo-multiply').addEventListener('click', () => this.startMultiplication());
         document.getElementById('algo-divide').addEventListener('click', () => this.startDivision());
+        document.getElementById('algo-decimal-divide').addEventListener('click', () => this.startDecimalDivision());
+        document.getElementById('algo-sqrt').addEventListener('click', () => this.startSquareRoot());
         
         // Playback controls
         document.getElementById('play').addEventListener('click', () => this.play());
@@ -103,6 +106,7 @@ class Brunsviga {
     // Basic operations
     clearResult() {
         this.resultCounter.fill(0);
+        this.resultDecimalPosition = null;
         this.updateDisplay();
         this.setStatus('Resultatwerk gelöscht');
     }
@@ -155,18 +159,21 @@ class Brunsviga {
     }
 
     updateRevolutionCounter(direction) {
-        const absPos = Math.abs(this.carriagePosition);
+        const absPos = Math.min(Math.abs(this.carriagePosition), this.revolutionCounter.length - 1);
+        let index = this.revolutionCounter.length - 1 - absPos;
         let carry = direction > 0 ? 1 : -1;
-        
-        for (let i = absPos; i >= 0 && carry !== 0; i--) {
-            this.revolutionCounter[i] += carry;
-            
-            if (this.revolutionCounter[i] > 9) {
-                this.revolutionCounter[i] = 0;
+
+        while (carry !== 0 && index >= 0) {
+            this.revolutionCounter[index] += carry;
+
+            if (this.revolutionCounter[index] > 9) {
+                this.revolutionCounter[index] = 0;
                 carry = 1;
-            } else if (this.revolutionCounter[i] < 0) {
-                this.revolutionCounter[i] = 9;
+                index--;
+            } else if (this.revolutionCounter[index] < 0) {
+                this.revolutionCounter[index] = 9;
                 carry = -1;
+                index--;
             } else {
                 carry = 0;
             }
@@ -212,14 +219,34 @@ class Brunsviga {
 
     updateDisplay() {
         // Update result counter
-        this.resultCounter.forEach((digit, i) => {
-            this.elements.resultCounter.children[i].textContent = digit;
-        });
-        
+        const resultDigits = this.elements.resultCounter.children;
+        for (let i = 0; i < this.resultCounter.length; i++) {
+            const digitElement = resultDigits[i];
+            if (!digitElement) {
+                continue;
+            }
+            digitElement.textContent = this.resultCounter[i];
+            digitElement.classList.remove('decimal-marker');
+        }
+
+        if (this.resultDecimalPosition !== null) {
+            const markerIndex = Math.max(0, Math.min(resultDigits.length - 1, this.resultDecimalPosition - 1));
+            const markerDigit = resultDigits[markerIndex];
+            if (markerDigit) {
+                markerDigit.classList.add('decimal-marker');
+            }
+        }
+
         // Update revolution counter
-        this.revolutionCounter.forEach((digit, i) => {
-            this.elements.revolutionCounter.children[i].textContent = digit;
-        });
+        const revolutionDigits = this.elements.revolutionCounter.children;
+        for (let i = 0; i < this.revolutionCounter.length; i++) {
+            const displayIndex = i;
+            const digitElement = revolutionDigits[displayIndex];
+            if (!digitElement) {
+                continue;
+            }
+            digitElement.textContent = this.revolutionCounter[i];
+        }
         
         // Update input register
         const inputs = this.elements.inputRegister.querySelectorAll('input');
@@ -435,6 +462,7 @@ class Brunsviga {
         this.revolutionCounter.fill(0);
         this.inputRegister.fill(0);
         this.carriagePosition = 0;
+        this.resultDecimalPosition = null;
         this.updateDisplay();
     }
 
@@ -455,7 +483,14 @@ class Brunsviga {
             case 'setResultDirect':
                 this.setResultValue(step.value);
                 break;
-                
+
+            case 'setResultDecimal':
+                this.setResultValue(step.value, { decimalPlaces: step.decimalPlaces });
+                break;
+
+            case 'note':
+                break;
+
             case 'crank':
                 this.crankTurn(step.direction);
                 break;
@@ -475,7 +510,7 @@ class Brunsviga {
     }
 
     setInputValue(value) {
-        this.clearInput();
+        this.inputRegister.fill(0);
         const str = Math.abs(value).toString().padStart(13, '0');
         for (let i = 0; i < 13; i++) {
             this.inputRegister[i] = parseInt(str[i]);
@@ -483,13 +518,138 @@ class Brunsviga {
         this.updateDisplay();
     }
 
-    setResultValue(value) {
-        this.clearResult();
-        const str = Math.abs(value).toString().padStart(13, '0');
-        for (let i = 0; i < 13; i++) {
-            this.resultCounter[i] = parseInt(str[i]);
+    setResultValue(value, options = {}) {
+        this.resultCounter.fill(0);
+        this.resultDecimalPosition = null;
+
+        const { decimalPlaces = null } = options;
+
+        let workingValue = value;
+
+        if (typeof workingValue === 'string') {
+            workingValue = workingValue.replace('-', '');
+        } else if (typeof workingValue === 'number') {
+            workingValue = Math.abs(workingValue);
+        } else {
+            workingValue = 0;
         }
+
+        let stringValue;
+
+        if (typeof workingValue === 'number') {
+            if (decimalPlaces !== null && !Number.isNaN(decimalPlaces)) {
+                stringValue = workingValue.toFixed(decimalPlaces);
+            } else {
+                stringValue = workingValue.toString();
+            }
+        } else {
+            stringValue = workingValue.toString();
+        }
+
+        stringValue = stringValue.replace(',', '.');
+
+        let decimalDigits = 0;
+        if (stringValue.includes('.')) {
+            const parts = stringValue.split('.');
+            decimalDigits = parts[1].length;
+            stringValue = parts.join('');
+            this.resultDecimalPosition = Math.max(0, this.resultCounter.length - decimalDigits);
+        }
+
+        stringValue = stringValue.replace(/\D/g, '');
+        if (stringValue.length === 0) {
+            stringValue = '0';
+        }
+
+        if (stringValue.length > this.resultCounter.length) {
+            stringValue = stringValue.slice(-this.resultCounter.length);
+        } else {
+            stringValue = stringValue.padStart(this.resultCounter.length, '0');
+        }
+
+        for (let i = 0; i < this.resultCounter.length; i++) {
+            this.resultCounter[i] = parseInt(stringValue[i], 10);
+        }
+
         this.updateDisplay();
+    }
+
+    startDecimalDivision() {
+        const dividend = parseFloat(document.getElementById('operand-a').value);
+        const divisor = parseFloat(document.getElementById('operand-b').value);
+
+        if (Number.isNaN(dividend) || Number.isNaN(divisor)) {
+            this.setStatus('Bitte gültige Zahlen eingeben.');
+            return;
+        }
+
+        if (divisor === 0) {
+            this.setStatus('Division durch Null nicht möglich!');
+            return;
+        }
+
+        const decimalPlaces = 5;
+        const quotient = dividend / divisor;
+        const roundedQuotient = parseFloat(quotient.toFixed(decimalPlaces));
+        const remainder = parseFloat((dividend - divisor * roundedQuotient).toFixed(decimalPlaces));
+        const remainderDisplay = remainder.toFixed(decimalPlaces);
+
+        this.algorithmSteps = [
+            { action: 'clearAll', description: 'Alle Register löschen' },
+            { action: 'note', description: `Dividend ${dividend} und Divisor ${divisor} vorbereiten` },
+            {
+                action: 'setResultDecimal',
+                value: Math.abs(roundedQuotient),
+                decimalPlaces,
+                description: `Quotient mit ${decimalPlaces} Dezimalstellen einstellen`
+            },
+            {
+                action: 'complete',
+                description: `Ergebnis: Quotient=${roundedQuotient.toFixed(decimalPlaces)}, Rest=${remainderDisplay}`
+            }
+        ];
+
+        if (roundedQuotient < 0) {
+            this.algorithmSteps.splice(2, 0, { action: 'note', description: 'Negatives Ergebnis - Vorzeichen merken' });
+        }
+
+        this.prepareAlgorithm();
+    }
+
+    startSquareRoot() {
+        const value = parseFloat(document.getElementById('operand-a').value);
+
+        if (Number.isNaN(value)) {
+            this.setStatus('Bitte eine gültige Zahl für Operand A eingeben.');
+            return;
+        }
+
+        if (value < 0) {
+            this.setStatus('Wurzel aus negativen Zahlen ist nicht definiert.');
+            return;
+        }
+
+        const decimalPlaces = 5;
+        const root = Math.sqrt(value);
+        const roundedRoot = parseFloat(root.toFixed(decimalPlaces));
+
+        this.algorithmSteps = [
+            { action: 'clearAll', description: 'Alle Register löschen' },
+            { action: 'setInput', value: Math.floor(value), description: `Operand (${value}) im Einstellwerk einstellen` },
+            { action: 'note', description: 'Wurzelberechnung vorbereiten' },
+            {
+                action: 'setResultDecimal',
+                value: roundedRoot,
+                decimalPlaces,
+                description: `Quadratwurzel mit ${decimalPlaces} Dezimalstellen einstellen`
+            },
+            {
+                action: 'complete',
+                description: `Ergebnis: √${value} = ${roundedRoot.toFixed(decimalPlaces)}`
+            }
+        ];
+
+        this.prepareAlgorithm();
     }
 }
 

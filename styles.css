@@ -100,6 +100,7 @@ h3 {
     box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5),
                 0 2px 5px rgba(0, 255, 0, 0.2);
     transition: all 0.3s ease;
+    position: relative;
 }
 
 .counter .digit.animating {
@@ -107,6 +108,16 @@ h3 {
     box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5),
                 0 0 20px rgba(0, 255, 0, 0.8);
     transform: scale(1.1);
+}
+
+.counter .digit.decimal-marker::after {
+    content: '.';
+    position: absolute;
+    right: -8px;
+    bottom: 8px;
+    color: #00ff00;
+    font-size: 1.4em;
+    line-height: 1;
 }
 
 /* Input Register */
