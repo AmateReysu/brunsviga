@@ -624,6 +624,10 @@ class Brunsviga {
                 this.setInputValue(step.value);
                 break;
 
+            case 'setInputAtPosition':
+                this.setInputValueAtPosition(step.value, step.position);
+                break;
+
             case 'setResultDirect':
                 this.setResultValue(step.value);
                 break;
@@ -692,6 +696,24 @@ class Brunsviga {
         const str = Math.abs(value).toString().padStart(13, '0');
         for (let i = 0; i < 13; i++) {
             this.inputRegister[i] = parseInt(str[i]);
+        }
+        this.updateDisplay();
+    }
+
+    setInputValueAtPosition(value, rightmostPosition) {
+        // Stellt eine Zahl im Einstellwerk ein, wobei rightmostPosition die
+        // niederwertigste Stelle angibt (0 = ganz links, 12 = ganz rechts)
+        this.inputRegister.fill(0);
+        const str = Math.abs(value).toString();
+        const startPos = rightmostPosition - str.length + 1;
+
+        if (startPos >= 0 && rightmostPosition < 13) {
+            for (let i = 0; i < str.length; i++) {
+                const pos = startPos + i;
+                if (pos >= 0 && pos < 13) {
+                    this.inputRegister[pos] = parseInt(str[i]);
+                }
+            }
         }
         this.updateDisplay();
     }
@@ -932,29 +954,17 @@ class Brunsviga {
             description: `Radikand ${radicand} möglichst weit rechts im Resultatwerk einstellen`
         });
 
-        // Berechne die Carriage-Positionen für jede Gruppe
-        // Die Carriage-Position bestimmt die Magnitude der Subtraktion
-        // Für Gruppe i von n Gruppen: verbleibende Gruppen = n - i - 1
-        // Magnitude = 10^(2 * verbleibende Gruppen)
-        // Bei rechtsbündigem Einstellwerk (Position 12 = niedrigste Stelle):
-        // carriagePosition = -(2 * verbleibende Gruppen)
-        let currentCarriage = 0;
-
         // Berechne die Wurzel Gruppe für Gruppe
+        // Der Carriage bleibt auf Position 0, die Position im Einstellwerk bestimmt die Magnitude
         let remainder = BigInt(radicand);
         let partialRoot = 0n;
 
         groups.forEach((groupStr, groupIndex) => {
-            // Berechne die benötigte Carriage-Position für diese Gruppe
+            // Berechne die benötigte Position im Einstellwerk für diese Gruppe
+            // verbleibende Gruppen = n - groupIndex - 1
+            // Die niederwertigste Stelle soll an Position: 12 - (2 × verbleibende_Gruppen)
             const remainingGroups = groups.length - groupIndex - 1;
-            const targetCarriage = -(2 * remainingGroups);
-
-            // Bewege Carriage zur Position für diese Gruppe
-            if (targetCarriage !== currentCarriage) {
-                const { steps, finalPosition } = this.createCarriageMovementSteps(currentCarriage, targetCarriage);
-                steps.forEach(step => this.algorithmSteps.push(step));
-                currentCarriage = finalPosition;
-            }
+            const inputPosition = 12 - (2 * remainingGroups);
 
             const base = partialRoot * 20n;
             let odd = base + 1n;
@@ -963,7 +973,7 @@ class Brunsviga {
 
             this.algorithmSteps.push({
                 action: 'note',
-                description: `Gruppe ${groupIndex + 1} (${groupStr}): Schlittenposition ${currentCarriage}, beginnend mit ungerader Zahl ${odd}, wird nun solange subtrahiert, bis der Rest negativ würde`
+                description: `Gruppe ${groupIndex + 1} (${groupStr}): Beginnend mit ungerader Zahl ${odd}, Einstellwerk-Position ${inputPosition} (Magnitude 10^${2 * remainingGroups})`
             });
 
             // Probiere ungerade Zahlen nacheinander
@@ -974,9 +984,10 @@ class Brunsviga {
                 if (remainder < oddNumber) {
                     // Klingelzeichen - diese Zahl passt nicht mehr
                     this.algorithmSteps.push({
-                        action: 'setInput',
+                        action: 'setInputAtPosition',
                         value: Number(oddNumber),
-                        description: `Ungerade Zahl ${oddNumber} im Einstellwerk einstellen`
+                        position: inputPosition,
+                        description: `Ungerade Zahl ${oddNumber} an Position ${inputPosition} im Einstellwerk einstellen`
                     });
                     this.algorithmSteps.push({
                         action: 'crank',
@@ -997,9 +1008,10 @@ class Brunsviga {
                 successfulSubtractions++;
 
                 this.algorithmSteps.push({
-                    action: 'setInput',
+                    action: 'setInputAtPosition',
                     value: Number(oddNumber),
-                    description: `Ungerade Zahl ${oddNumber} im Einstellwerk einstellen`
+                    position: inputPosition,
+                    description: `Ungerade Zahl ${oddNumber} an Position ${inputPosition} im Einstellwerk einstellen`
                 });
                 this.algorithmSteps.push({
                     action: 'crank',
@@ -1031,12 +1043,6 @@ class Brunsviga {
                 });
             }
         });
-
-        // Carriage zurück auf Position 0
-        if (currentCarriage !== 0) {
-            const { steps } = this.createCarriageMovementSteps(currentCarriage, 0);
-            steps.forEach(step => this.algorithmSteps.push(step));
-        }
 
         const rootValue = Number(partialRoot);
         const remainderValue = Number(remainder);
