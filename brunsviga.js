@@ -1005,6 +1005,16 @@ class Brunsviga {
                         description: `Kurbel vorwärts drehen zur Korrektur`
                     });
 
+                    const correctedNumber = oddNumber - 1n;
+                    if (correctedNumber >= 0n) {
+                        this.algorithmSteps.push({
+                            action: 'setInputAtPosition',
+                            value: Number(correctedNumber),
+                            position: inputPosition,
+                            description: `Zahl nach Klingelzeichen um 1 reduzieren: ${oddNumber} → ${correctedNumber}`
+                        });
+                    }
+
                     // Nach Unterlauf: Carriage nach rechts für nächste Gruppe
                     if (groupIndex < groups.length - 1) {
                         this.algorithmSteps.push({
