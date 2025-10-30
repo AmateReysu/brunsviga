@@ -818,43 +818,38 @@ class Brunsviga {
         const alignmentZeros = Math.max(0, divisorInfo.decimals - dividendInfo.decimals);
 
         const stageDigits = quotientAbsStr.split('').map(d => parseInt(d, 10));
-        const manualStartPosition = 8;
-        const stageNotes = [];
-
-        stageDigits.forEach((digit, index) => {
-            const isDecimal = index >= integerDigitCount;
-            const stageNumber = index + 1;
-            const decimalIndex = stageNumber - integerDigitCount;
-            const position = manualStartPosition - index;
-
-            if (digit === 0) {
-                stageNotes.push(
-                    `Schlitten Stellung ${position}: Divisor passt nicht – Ergebnisziffer 0 und Schlitten eine Stelle nach links rücken${isDecimal ? ' (Dezimalstelle)' : ''}.`
-                );
-            } else {
-                stageNotes.push(
-                    `Schlitten Stellung ${position}: Divisor passt ${digit}-mal – ${digit} Rückwärtsdrehungen, Klingelzeichen, eine Vorwärtsdrehung und Schlitten nach links schieben${isDecimal ? ` (Dezimalstelle ${decimalIndex})` : ''}.`
-                );
-            }
-        });
+        const manualStartPosition = 6;  // Start position for carriage
 
         this.algorithmSteps = [];
         this.algorithmSteps.push({ action: 'clearAll', description: 'Alle Register löschen' });
 
-        const { steps: moveRightSteps } = this.createCarriageMovementSteps(0, 6);
+        // Move carriage to starting position (right side)
+        const { steps: moveRightSteps } = this.createCarriageMovementSteps(0, manualStartPosition);
         moveRightSteps.forEach(step => this.algorithmSteps.push(step));
 
+        // Set dividend in input register and transfer to result
+        const dividendValue = Math.abs(parseFloat(dividendInfo.normalized));
         this.algorithmSteps.push({
-            action: 'note',
-            description: `Dividend ${dividendInfo.normalized.replace('.', ',')} in Stellung 8 übernehmen und durch eine Vorwärtsdrehung in das Resultatwerk übertragen.`
+            action: 'setInput',
+            value: Math.floor(dividendValue * Math.pow(10, dividendInfo.decimals)),
+            description: `Dividend ${dividendInfo.normalized.replace('.', ',')} im Einstellwerk einstellen`
+        });
+
+        this.algorithmSteps.push({
+            action: 'crank',
+            direction: 1,
+            description: 'Kurbel vorwärts drehen, um Dividend in das Resultatwerk zu übertragen'
         });
 
         this.algorithmSteps.push({ action: 'clearInput', description: 'Einstellwerk leeren (E-Werk löschen)' });
         this.algorithmSteps.push({ action: 'clearRevolution', description: 'Umdrehungszähler zurücksetzen' });
 
+        // Set divisor in input register
+        const divisorValue = Math.abs(parseFloat(divisorInfo.normalized));
         this.algorithmSteps.push({
-            action: 'note',
-            description: `Divisor ${divisorInfo.normalized.replace('.', ',')} im Einstellwerk so ausrichten, dass seine höchste Stelle unter der führenden Stelle des Dividenden steht.`
+            action: 'setInput',
+            value: Math.floor(divisorValue * Math.pow(10, divisorInfo.decimals)),
+            description: `Divisor ${divisorInfo.normalized.replace('.', ',')} im Einstellwerk einstellen`
         });
 
         let komaText;
@@ -866,24 +861,67 @@ class Brunsviga {
 
         this.algorithmSteps.push({ action: 'note', description: `Komma-Regel beachten: ${komaText}` });
 
-        stageNotes.forEach(note => {
-            this.algorithmSteps.push({ action: 'note', description: note });
+        // Perform division steps
+        let currentCarriage = manualStartPosition;
+        stageDigits.forEach((digit, index) => {
+            const isDecimal = index >= integerDigitCount;
+            const decimalIndex = index - integerDigitCount + 1;
+            const targetPosition = manualStartPosition - index;
+
+            // Move carriage to position for this digit
+            if (index > 0) {
+                const { steps: moveSteps } = this.createCarriageMovementSteps(currentCarriage, targetPosition);
+                moveSteps.forEach(step => this.algorithmSteps.push(step));
+                currentCarriage = targetPosition;
+            }
+
+            if (digit === 0) {
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Schlitten Stellung ${targetPosition}: Divisor passt nicht – Ergebnisziffer 0${isDecimal ? ' (Dezimalstelle)' : ''}`
+                });
+            } else {
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Schlitten Stellung ${targetPosition}: Divisor passt ${digit}-mal${isDecimal ? ` (Dezimalstelle ${decimalIndex})` : ''}`
+                });
+
+                // Perform backward cranks
+                for (let turn = 0; turn < digit; turn++) {
+                    this.algorithmSteps.push({
+                        action: 'crank',
+                        direction: -1,
+                        description: `Kurbel rückwärts drehen (${turn + 1}/${digit})`
+                    });
+                }
+
+                // One forward crank after bell signal
+                this.algorithmSteps.push({
+                    action: 'crank',
+                    direction: 1,
+                    description: 'Klingelzeichen erreicht - eine Vorwärtsdrehung'
+                });
+            }
         });
+
+        // Move carriage back to center
+        if (currentCarriage !== 0) {
+            const { steps: moveBackSteps } = this.createCarriageMovementSteps(currentCarriage, 0);
+            moveBackSteps.forEach(step => this.algorithmSteps.push(step));
+        }
 
         if (signNegative) {
             this.algorithmSteps.push({ action: 'note', description: 'Negatives Ergebnis – Vorzeichen gesondert notieren.' });
         }
 
         this.algorithmSteps.push({
-            action: 'setResultDecimal',
-            value: Math.abs(quotientValue),
-            decimalPlaces,
-            description: `Quotientenwert ${quotientDisplayGerman} im Resultatwerk einstellen.`
+            action: 'note',
+            description: `Quotient im Umdrehungszähler: ${quotientDisplayGerman}`
         });
 
         this.algorithmSteps.push({
             action: 'note',
-            description: `Rest nach ${decimalPlaces} Dezimalstellen: ${remainderDisplay}`
+            description: `Rest im Resultatwerk: ${remainderDisplay}`
         });
 
         this.algorithmSteps.push({
@@ -996,6 +1034,27 @@ class Brunsviga {
         this.algorithmSteps.push({ action: 'clearAll', description: 'Alle Register löschen' });
         this.algorithmSteps.push({ action: 'note', description: `Radikand ${normalized.replace('.', ',')} vorbereiten und vom Komma aus Zweiergruppen bilden: ${groupDisplay}` });
 
+        // Initial setup: set radicand in result register
+        const radicandIntValue = parseInt(integerDigits + fractionalDigits.slice(0, decimalPlaces).padEnd(decimalPlaces, '0'), 10);
+        this.algorithmSteps.push({
+            action: 'setResultDirect',
+            value: radicandIntValue,
+            description: `Radikand im Resultatwerk einstellen`
+        });
+
+        this.algorithmSteps.push({ action: 'clearRevolution', description: 'Umdrehungszähler zurücksetzen' });
+
+        // Starting carriage position for root extraction
+        const startingPosition = integerGroupCount - 1;
+        let currentCarriage = 0;
+
+        // Move to starting position if needed
+        if (startingPosition !== 0) {
+            const { steps: initialMoveSteps } = this.createCarriageMovementSteps(0, startingPosition);
+            initialMoveSteps.forEach(step => this.algorithmSteps.push(step));
+            currentCarriage = startingPosition;
+        }
+
         stageDetails.forEach((detail, stageIndex) => {
             const isDecimal = stageIndex >= integerGroupCount;
             const oddSequence = detail.oddNumbers.map(n => n.toString()).join(', ');
@@ -1019,15 +1078,37 @@ class Brunsviga {
                 doubleFormatted = `${doubleIntPart},${doubleFracPart}`;
             }
 
-            if (detail.digit === 0) {
+            this.algorithmSteps.push({
+                action: 'note',
+                description: `Gruppe ${detail.group} verarbeiten${isDecimal ? ' (Dezimalstelle)' : ''}`
+            });
+
+            // Set the sequence of odd numbers in input register
+            if (detail.digit > 0) {
+                // For each odd number in the sequence, set it in input and crank backward
+                detail.oddNumbers.forEach((oddNum, oddIndex) => {
+                    const oddValue = parseInt(oddNum.toString(), 10);
+                    this.algorithmSteps.push({
+                        action: 'setInput',
+                        value: oddValue,
+                        description: `Ungerade Zahl ${oddNum.toString()} im Einstellwerk einstellen`
+                    });
+
+                    this.algorithmSteps.push({
+                        action: 'crank',
+                        direction: -1,
+                        description: `Kurbel rückwärts drehen (${oddIndex + 1}/${detail.oddNumbers.length}) - Zahl ${oddNum.toString()} abziehen`
+                    });
+                });
+
                 this.algorithmSteps.push({
                     action: 'note',
-                    description: `Gruppe ${detail.group}: keine ungerade Zahl passt – Ergebnisziffer 0, Rest ${detail.remainder.toString()}${isDecimal ? ' (Dezimalstelle)' : ''}.`
+                    description: `Klingelzeichen bei ${overshoot} erreicht - ${detail.digit} erfolgreiche Rückwärtsdrehungen. Teilwurzel: ${partialRootFormatted}`
                 });
             } else {
                 this.algorithmSteps.push({
                     action: 'note',
-                    description: `Gruppe ${detail.group}: Folge der ungeraden Zahlen ${oddSequence} abziehen, Klingelzeichen bei ${overshoot}, also ${detail.digit} erfolgreiche Rückwärtsdrehungen. Teilwurzel jetzt ${partialRootFormatted}${isDecimal ? ' (Dezimalstelle)' : ''}.`
+                    description: `Keine ungerade Zahl passt – Ergebnisziffer 0, Rest ${detail.remainder.toString()}`
                 });
             }
 
@@ -1035,13 +1116,25 @@ class Brunsviga {
                 action: 'note',
                 description: `Doppelte Wurzel für die nächste Gruppe: ${doubleFormatted}`
             });
+
+            // Move carriage left for next group
+            if (stageIndex < stageDetails.length - 1) {
+                const targetPosition = currentCarriage - 1;
+                const { steps: moveSteps } = this.createCarriageMovementSteps(currentCarriage, targetPosition);
+                moveSteps.forEach(step => this.algorithmSteps.push(step));
+                currentCarriage = targetPosition;
+            }
         });
 
+        // Move carriage back to center
+        if (currentCarriage !== 0) {
+            const { steps: moveBackSteps } = this.createCarriageMovementSteps(currentCarriage, 0);
+            moveBackSteps.forEach(step => this.algorithmSteps.push(step));
+        }
+
         this.algorithmSteps.push({
-            action: 'setResultDecimal',
-            value: rootValue,
-            decimalPlaces,
-            description: `Wurzelwert ${rootValue.toFixed(decimalPlaces).replace('.', ',')} im Resultatwerk einstellen.`
+            action: 'note',
+            description: `Wurzel im Umdrehungszähler: ${rootValue.toFixed(decimalPlaces).replace('.', ',')}`
         });
 
         this.algorithmSteps.push({
