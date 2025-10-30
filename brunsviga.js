@@ -7,7 +7,7 @@ class Brunsviga {
     constructor() {
         // Machine state
         this.resultCounter = new Array(13).fill(0);
-        this.revolutionCounter = 0; // Simple counter, not affected by carriage position
+        this.revolutionCounter = new Array(8).fill(0); // Position-aware counter array
         this.inputRegister = new Array(13).fill(0);
         this.carriagePosition = 0;
         this.resultDecimalPosition = null;
@@ -112,7 +112,7 @@ class Brunsviga {
     }
 
     clearRevolution() {
-        this.revolutionCounter = 0;
+        this.revolutionCounter.fill(0);
         this.updateDisplay();
         this.setStatus('Umdrehungszähler gelöscht');
     }
@@ -159,23 +159,61 @@ class Brunsviga {
     }
 
     updateRevolutionCounter(direction) {
-        // Simple counter: increment on forward crank, decrement on backward crank
-        // Not affected by carriage position
-        this.revolutionCounter += direction;
+        // Position-aware counter: updates the digit corresponding to carriage position
+        // Maps carriage position to revolution counter index: 4 - carriagePosition
+        // This allows positions from -3 to +4 to map to indices 0 to 7
+        const revolutionIndex = 4 - this.carriagePosition;
+
+        if (revolutionIndex >= 0 && revolutionIndex < 8) {
+            let newValue = this.revolutionCounter[revolutionIndex] + direction;
+            let carry = 0;
+
+            // Handle overflow/underflow with carry
+            if (newValue > 9) {
+                carry = Math.floor(newValue / 10);
+                newValue = newValue % 10;
+            } else if (newValue < 0) {
+                carry = -1;
+                newValue = 10 + newValue;
+            }
+
+            this.revolutionCounter[revolutionIndex] = newValue;
+
+            // Propagate carry to the left
+            if (carry !== 0) {
+                let carryIndex = revolutionIndex - 1;
+                while (carry !== 0 && carryIndex >= 0) {
+                    this.revolutionCounter[carryIndex] += carry;
+                    if (this.revolutionCounter[carryIndex] > 9) {
+                        carry = Math.floor(this.revolutionCounter[carryIndex] / 10);
+                        this.revolutionCounter[carryIndex] = this.revolutionCounter[carryIndex] % 10;
+                    } else if (this.revolutionCounter[carryIndex] < 0) {
+                        carry = -1;
+                        this.revolutionCounter[carryIndex] = 10 + this.revolutionCounter[carryIndex];
+                    } else {
+                        carry = 0;
+                    }
+                    carryIndex--;
+                }
+            }
+
+            // Animate the updated digit
+            this.animateDigit('revolution', revolutionIndex);
+        }
     }
 
     performCalculation(direction) {
         let carry = 0;
-        const offset = Math.max(0, this.carriagePosition);
-        
+        const offset = this.carriagePosition; // Remove Math.max to allow negative positions
+
         for (let i = 12; i >= 0; i--) {
             const inputValue = this.inputRegister[i];
             const adjustedIndex = i + offset;
-            
+
             if (adjustedIndex >= 0 && adjustedIndex < 13) {
                 let newValue = this.resultCounter[adjustedIndex] + (inputValue * direction) + carry;
                 carry = 0;
-                
+
                 if (newValue > 9) {
                     carry = Math.floor(newValue / 10);
                     newValue = newValue % 10;
@@ -183,9 +221,9 @@ class Brunsviga {
                     carry = -1;
                     newValue = 10 + newValue;
                 }
-                
+
                 this.resultCounter[adjustedIndex] = newValue;
-                
+
                 // Animate this digit
                 this.animateDigit('result', adjustedIndex);
             }
@@ -223,23 +261,13 @@ class Brunsviga {
 
         // Update revolution counter
         const revolutionDigits = this.elements.revolutionCounter.children;
-        const isNegative = this.revolutionCounter < 0;
-        const absValue = Math.abs(this.revolutionCounter);
-        const counterStr = absValue.toString().padStart(8, '0');
-
-        for (let i = 0; i < Math.min(8, revolutionDigits.length); i++) {
+        for (let i = 0; i < this.revolutionCounter.length; i++) {
             const digitElement = revolutionDigits[i];
             if (!digitElement) {
                 continue;
             }
-            digitElement.textContent = counterStr[i];
-
-            // Add or remove negative class for red color
-            if (isNegative) {
-                digitElement.classList.add('negative');
-            } else {
-                digitElement.classList.remove('negative');
-            }
+            digitElement.textContent = this.revolutionCounter[i];
+            digitElement.classList.remove('negative');
         }
         
         // Update input register
@@ -557,7 +585,7 @@ class Brunsviga {
 
     resetMachine() {
         this.resultCounter.fill(0);
-        this.revolutionCounter = 0;
+        this.revolutionCounter.fill(0);
         this.inputRegister.fill(0);
         this.carriagePosition = 0;
         this.resultDecimalPosition = null;
