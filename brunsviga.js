@@ -909,11 +909,11 @@ class Brunsviga {
         }
 
         const decimalPlaces = 5;
-        const normalized = parsed.normalized;
-        const absString = normalized.startsWith('-') ? normalized.slice(1) : normalized;
-        const parts = absString.split('.');
+        const normalized = parsed.normalized.replace(',', '.');
+        const absoluteNormalized = normalized.startsWith('-') ? normalized.slice(1) : normalized;
+        const parts = absoluteNormalized.split('.');
         const integerDigits = parts[0].replace(/[^0-9]/g, '') || '0';
-        const fractionalDigits = parts[1] ? parts[1].replace(/[^0-9]/g, '') : '';
+        const fractionalDigitsRaw = parts[1] ? parts[1].replace(/[^0-9]/g, '') : '';
 
         const intGroups = [];
         for (let i = integerDigits.length; i > 0; i -= 2) {
@@ -925,8 +925,8 @@ class Brunsviga {
         }
 
         const fracGroups = [];
-        for (let i = 0; i < fractionalDigits.length; i += 2) {
-            let group = fractionalDigits.slice(i, i + 2);
+        for (let i = 0; i < fractionalDigitsRaw.length; i += 2) {
+            let group = fractionalDigitsRaw.slice(i, i + 2);
             if (group.length < 2) {
                 group = `${group}0`;
             }
@@ -936,17 +936,40 @@ class Brunsviga {
             fracGroups.push('00');
         }
 
-        const totalGroups = intGroups.concat(fracGroups.slice(0, decimalPlaces));
+        const fractionalGroupsUsed = fracGroups.slice(0, decimalPlaces);
+        const totalGroups = intGroups.concat(fractionalGroupsUsed);
         const integerGroupCount = intGroups.length;
+
+        const formatScaledValue = (value, decimalDigits, { trimTrailingZeros = false } = {}) => {
+            const negative = value < 0n;
+            let digits = (negative ? -value : value).toString();
+
+            if (decimalDigits === 0) {
+                return `${negative ? '-' : ''}${digits}`;
+            }
+
+            digits = digits.padStart(decimalDigits + 1, '0');
+            const integerPart = digits.slice(0, -decimalDigits) || '0';
+            let fractionalPart = digits.slice(-decimalDigits);
+
+            if (trimTrailingZeros) {
+                fractionalPart = fractionalPart.replace(/0+$/, '');
+            }
+
+            const hasFraction = fractionalPart.length > 0;
+            const fractionBody = trimTrailingZeros ? fractionalPart : fractionalPart.padEnd(decimalDigits, '0');
+            const formattedFraction = hasFraction ? `,${fractionBody}` : '';
+            return `${negative ? '-' : ''}${integerPart}${formattedFraction}`;
+        };
 
         let remainder = 0n;
         let partialRoot = 0n;
-        const stageDetails = [];
-        const rootDigits = [];
+        const stageRecords = [];
 
         totalGroups.forEach((groupStr, index) => {
             const groupValue = BigInt(groupStr);
             remainder = remainder * 100n + groupValue;
+            const remainderBeforeSubtractions = remainder;
             const base = partialRoot * 20n;
             let odd = base + 1n;
             const oddNumbers = [];
@@ -959,99 +982,130 @@ class Brunsviga {
                 digit++;
             }
 
-            const attemptedOdd = odd;
-            const digitBigInt = BigInt(digit);
-            partialRoot = partialRoot * 10n + digitBigInt;
-            rootDigits.push(digit);
+            const newPartialRoot = partialRoot * 10n + BigInt(digit);
+            const doubleForNext = newPartialRoot * 2n;
+            const decimalDigitsSoFar = Math.max(0, index + 1 - integerGroupCount);
 
-            stageDetails.push({
+            stageRecords.push({
                 index,
-                group: groupStr,
+                group: groupStr.padStart(2, '0'),
                 oddNumbers,
-                attemptedOdd,
+                overshoot: odd,
                 digit,
-                partialRoot,
-                remainder
+                decimalDigitsSoFar,
+                partialRoot: newPartialRoot,
+                doubleForNext,
+                remainderBefore: remainderBeforeSubtractions,
+                remainderAfter: remainder
             });
+
+            partialRoot = newPartialRoot;
         });
 
-        const rootDigitsStr = rootDigits.map(String).join('');
-        const integerPart = rootDigitsStr.slice(0, integerGroupCount) || '0';
-        let fractionalPart = rootDigitsStr.slice(integerGroupCount);
+        const rootDigitsStr = stageRecords.map(record => record.digit.toString()).join('');
+        const integerDigitsInRoot = integerGroupCount;
+        let integerPart = rootDigitsStr.slice(0, integerDigitsInRoot) || '0';
+        let fractionalPart = rootDigitsStr.slice(integerDigitsInRoot);
         if (fractionalPart.length < decimalPlaces) {
             fractionalPart = fractionalPart.padEnd(decimalPlaces, '0');
+        } else if (fractionalPart.length > decimalPlaces) {
+            fractionalPart = fractionalPart.slice(0, decimalPlaces);
         }
 
-        const rootValue = Number(`${integerPart}.${fractionalPart}`);
-        const radicandValue = parsed.number;
-        let remainderValue = radicandValue - rootValue * rootValue;
-        remainderValue = Number.parseFloat(remainderValue.toFixed(decimalPlaces));
-        if (Object.is(remainderValue, -0)) {
-            remainderValue = 0;
-        }
+        const rootValueString = decimalPlaces > 0 ? `${integerPart}.${fractionalPart}` : integerPart;
+        const rootDisplayGerman = rootValueString.replace('.', ',');
 
-        const groupDisplay = `${intGroups.join(' | ')}${decimalPlaces > 0 ? ' · ' + fracGroups.slice(0, decimalPlaces).join(' | ') : ''}`;
+        const remainderBigInt = stageRecords.length > 0 ? stageRecords[stageRecords.length - 1].remainderAfter : 0n;
+        const remainderScale = 10 ** (decimalPlaces * 2);
+        const remainderNumber = Number(remainderBigInt) / remainderScale;
+        const remainderDisplay = remainderNumber.toFixed(decimalPlaces).replace('.', ',');
+        const squaredValue = Number(rootValueString) ** 2;
+        const squaredDisplay = squaredValue.toFixed(decimalPlaces).replace('.', ',');
+
+        const groupDisplay = fractionalGroupsUsed.length > 0
+            ? `${intGroups.join(' | ')} · ${fractionalGroupsUsed.join(' | ')}`
+            : intGroups.join(' | ');
 
         this.algorithmSteps = [];
         this.algorithmSteps.push({ action: 'clearAll', description: 'Alle Register löschen' });
-        this.algorithmSteps.push({ action: 'note', description: `Radikand ${normalized.replace('.', ',')} vorbereiten und vom Komma aus Zweiergruppen bilden: ${groupDisplay}` });
 
-        stageDetails.forEach((detail, stageIndex) => {
-            const isDecimal = stageIndex >= integerGroupCount;
-            const oddSequence = detail.oddNumbers.map(n => n.toString()).join(', ');
-            const overshoot = detail.attemptedOdd.toString();
-            const digitsProcessed = stageIndex + 1;
-            const decimalDigitsSoFar = Math.max(0, digitsProcessed - integerGroupCount);
-            const integerDigitsSoFar = digitsProcessed - decimalDigitsSoFar;
-            const paddedPartial = detail.partialRoot.toString().padStart(digitsProcessed, '0');
-            const partialIntPart = paddedPartial.slice(0, integerDigitsSoFar) || '0';
-            const partialFracPart = decimalDigitsSoFar > 0 ? paddedPartial.slice(integerDigitsSoFar).padEnd(decimalDigitsSoFar, '0') : '';
-            const partialRootFormatted = decimalDigitsSoFar > 0 ? `${partialIntPart},${partialFracPart}` : partialIntPart;
+        const { steps: moveToStartSteps, finalPosition: startPosition } = this.createCarriageMovementSteps(this.carriagePosition, 6);
+        moveToStartSteps.forEach(step => this.algorithmSteps.push(step));
+        let currentCarriage = startPosition;
 
-            let doubleFormatted;
-            if (decimalDigitsSoFar === 0) {
-                doubleFormatted = (detail.partialRoot * 2n).toString();
-            } else {
-                const doubleRaw = (detail.partialRoot * 2n).toString();
-                const paddedDouble = doubleRaw.padStart(integerDigitsSoFar + decimalDigitsSoFar, '0');
-                const doubleIntPart = paddedDouble.slice(0, integerDigitsSoFar) || '0';
-                const doubleFracPart = paddedDouble.slice(integerDigitsSoFar).padEnd(decimalDigitsSoFar, '0');
-                doubleFormatted = `${doubleIntPart},${doubleFracPart}`;
-            }
-
-            if (detail.digit === 0) {
-                this.algorithmSteps.push({
-                    action: 'note',
-                    description: `Gruppe ${detail.group}: keine ungerade Zahl passt – Ergebnisziffer 0, Rest ${detail.remainder.toString()}${isDecimal ? ' (Dezimalstelle)' : ''}.`
-                });
-            } else {
-                this.algorithmSteps.push({
-                    action: 'note',
-                    description: `Gruppe ${detail.group}: Folge der ungeraden Zahlen ${oddSequence} abziehen, Klingelzeichen bei ${overshoot}, also ${detail.digit} erfolgreiche Rückwärtsdrehungen. Teilwurzel jetzt ${partialRootFormatted}${isDecimal ? ' (Dezimalstelle)' : ''}.`
-                });
-            }
-
-            this.algorithmSteps.push({
-                action: 'note',
-                description: `Doppelte Wurzel für die nächste Gruppe: ${doubleFormatted}`
-            });
+        this.algorithmSteps.push({
+            action: 'note',
+            description: `Radikand ${normalized.replace('.', ',')} vorbereiten und vom Komma aus Zweiergruppen bilden: ${groupDisplay}`
         });
+
+        let decimalSectionAnnounced = false;
+
+        stageRecords.forEach((record, stageIndex) => {
+            const digitsProcessed = stageIndex + 1;
+            const remainderBeforeFormatted = formatScaledValue(record.remainderBefore, record.decimalDigitsSoFar * 2);
+            const remainderAfterFormatted = formatScaledValue(record.remainderAfter, record.decimalDigitsSoFar * 2, { trimTrailingZeros: true });
+            const partialRootFormatted = formatScaledValue(record.partialRoot, record.decimalDigitsSoFar);
+            const doubleFormatted = formatScaledValue(record.doubleForNext, record.decimalDigitsSoFar);
+
+            const bringDescription = record.decimalDigitsSoFar === 0
+                ? `Gruppe ${record.group} übernehmen: Rest wird ${remainderBeforeFormatted}.`
+                : `Gruppe ${record.group} herunterholen → Rest ${remainderBeforeFormatted}.`;
+
+            this.algorithmSteps.push({ action: 'note', description: bringDescription });
+
+            if (!decimalSectionAnnounced && digitsProcessed > integerGroupCount) {
+                this.algorithmSteps.push({ action: 'note', description: 'Ab hier werden Dezimalstellen der Wurzel gebildet – Komma setzen.' });
+                decimalSectionAnnounced = true;
+            }
+
+            if (record.oddNumbers.length === 0) {
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Keine passende ungerade Zahl – Ergebnisziffer 0. Rest bleibt ${remainderAfterFormatted || '0'}.`
+                });
+            } else {
+                const oddSequenceFormatted = record.oddNumbers
+                    .map(number => formatScaledValue(number, record.decimalDigitsSoFar))
+                    .join(', ');
+                const overshootFormatted = formatScaledValue(record.overshoot, record.decimalDigitsSoFar);
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Ungerade Zahlen ${oddSequenceFormatted} nacheinander abziehen (je eine Rückwärtsdrehung). Klingelzeichen bei ${overshootFormatted} ⇒ Ergebnisziffer ${record.digit}. Rest ${remainderAfterFormatted || '0'}, Teilwurzel ${partialRootFormatted}.`
+                });
+            }
+
+            if (stageIndex < stageRecords.length - 1) {
+                this.algorithmSteps.push({
+                    action: 'note',
+                    description: `Doppelte Teilwurzel für die nächste Gruppe einstellen: ${doubleFormatted}.`
+                });
+
+                const { steps, finalPosition } = this.createCarriageMovementSteps(currentCarriage, currentCarriage - 1);
+                steps.forEach(step => this.algorithmSteps.push(step));
+                currentCarriage = finalPosition;
+            }
+        });
+
+        if (currentCarriage !== 0) {
+            const { steps } = this.createCarriageMovementSteps(currentCarriage, 0);
+            steps.forEach(step => this.algorithmSteps.push(step));
+        }
 
         this.algorithmSteps.push({
             action: 'setResultDecimal',
-            value: rootValue,
+            value: rootValueString,
             decimalPlaces,
-            description: `Wurzelwert ${rootValue.toFixed(decimalPlaces).replace('.', ',')} im Resultatwerk einstellen.`
+            description: `Wurzelwert ${rootDisplayGerman} im Resultatwerk einstellen.`
         });
 
         this.algorithmSteps.push({
             action: 'note',
-            description: `Quadrat der ermittelten Wurzel: ${(rootValue * rootValue).toFixed(decimalPlaces).replace('.', ',')} – Rest ${remainderValue.toFixed(decimalPlaces).replace('.', ',')}`
+            description: `Quadrat der ermittelten Wurzel: ${squaredDisplay} – Rest ${remainderDisplay}`
         });
 
         this.algorithmSteps.push({
             action: 'complete',
-            description: `√${normalized.replace('.', ',')} = ${rootValue.toFixed(decimalPlaces).replace('.', ',')} (Rest ${remainderValue.toFixed(decimalPlaces).replace('.', ',')})`
+            description: `√${normalized.replace('.', ',')} = ${rootDisplayGerman} (Rest ${remainderDisplay})`
         });
 
         this.prepareAlgorithm();
