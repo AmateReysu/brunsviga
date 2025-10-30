@@ -703,11 +703,18 @@ class Brunsviga {
     setInputValueAtPosition(value, rightmostPosition) {
         // Stellt eine Zahl im Einstellwerk ein, wobei rightmostPosition die
         // niederwertigste Stelle angibt (0 = ganz links, 12 = ganz rechts)
-        this.inputRegister.fill(0);
         const str = Math.abs(value).toString();
         const startPos = rightmostPosition - str.length + 1;
 
         if (startPos >= 0 && rightmostPosition < 13) {
+            // Bestehende Ziffern im relevanten Bereich zunächst löschen, ohne das
+            // restliche Einstellwerk anzutasten.
+            for (let pos = startPos; pos <= rightmostPosition; pos++) {
+                if (pos >= 0 && pos < 13) {
+                    this.inputRegister[pos] = 0;
+                }
+            }
+
             for (let i = 0; i < str.length; i++) {
                 const pos = startPos + i;
                 if (pos >= 0 && pos < 13) {
