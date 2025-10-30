@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brunsviga 13 RK Emulator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Brunsviga 13 RK Rechenmaschine</h1>
+        
+        <div class="machine">
+            <!-- Revolution Counter (Umdrehungszähler) -->
+            <div class="counter-section">
+                <label>Umdrehungszähler</label>
+                <div class="counter" id="revolution-counter">
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                </div>
+                <button class="clear-button" id="clear-revolution">Löschen</button>
+            </div>
+
+            <!-- Result Counter (Resultatwerk) -->
+            <div class="counter-section">
+                <label>Resultatwerk</label>
+                <div class="counter" id="result-counter">
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                    <span class="digit">0</span>
+                </div>
+                <button class="clear-button" id="clear-result">Löschen</button>
+            </div>
+
+            <!-- Input Register (Einstellwerk) -->
+            <div class="input-section">
+                <label>Einstellwerk</label>
+                <div class="input-register" id="input-register">
+                    <div class="input-digit">
+                        <button class="inc" data-position="0">▲</button>
+                        <input type="number" min="0" max="9" value="0" data-position="0">
+                        <button class="dec" data-position="0">▼</button>
+                    </div>
+                    <div class="input-digit">
+                        <button class="inc" data-position="1">▲</button>
+                        <input type="number" min="0" max="9" value="0" data-position="1">
+                        <button class="dec" data-position="1">▼</button>
+                    </div>
+                    <div class="input-digit">
+                        <button class="inc" data-position="2">▲</button>
+                        <input type="number" min="0" max="9" value="0" data-position="2">
+                        <button class="dec" data-position="2">▼</button>
+                    </div>
+                    <div class="input-digit">
+                        <button class="inc" data-position="3">▲</button>
+                        <input type="number" min="0" max="9" value="0" data-position="3">
+                        <button class="dec" data-position="3">▼</button>
+                    </div>
+                    <div class="input-digit">
+                        <button class="inc" data-position="4">▲</button>
+                        <input type="number" min="0" max="9" value="0" data-position="4">
+                        <button class="dec" data-position="4">▼</button>
+                    </div>
+                    <div class="input-digit">
+                        <button class="inc" data-position="5">▲</button>
+                        <input type="number" min="0" max="9" value="0" data-position="5">
+                        <button class="dec" data-position="5">▼</button>
+                    </div>
+                    <div class="input-digit">
+                        <button class="inc" data-position="6">▲</button>
+                        <input type="number" min="0" max="9" value="0" data-position="6">
+                        <button class="dec" data-position="6">▼</button>
+                    </div>
+                    <div class="input-digit">
+                        <button class="inc" data-position="7">▲</button>
+                        <input type="number" min="0" max="9" value="0" data-position="7">
+                        <button class="dec" data-position="7">▼</button>
+                    </div>
+                    <div class="input-digit">
+                        <button class="inc" data-position="8">▲</button>
+                        <input type="number" min="0" max="9" value="0" data-position="8">
+                        <button class="dec" data-position="8">▼</button>
+                    </div>
+                    <div class="input-digit">
+                        <button class="inc" data-position="9">▲</button>
+                        <input type="number" min="0" max="9" value="0" data-position="9">
+                        <button class="dec" data-position="9">▼</button>
+                    </div>
+                    <div class="input-digit">
+                        <button class="inc" data-position="10">▲</button>
+                        <input type="number" min="0" max="9" value="0" data-position="10">
+                        <button class="dec" data-position="10">▼</button>
+                    </div>
+                    <div class="input-digit">
+                        <button class="inc" data-position="11">▲</button>
+                        <input type="number" min="0" max="9" value="0" data-position="11">
+                        <button class="dec" data-position="11">▼</button>
+                    </div>
+                    <div class="input-digit">
+                        <button class="inc" data-position="12">▲</button>
+                        <input type="number" min="0" max="9" value="0" data-position="12">
+                        <button class="dec" data-position="12">▼</button>
+                    </div>
+                </div>
+                <button class="clear-button" id="clear-input">Löschen</button>
+            </div>
+
+            <!-- Carriage Position -->
+            <div class="carriage-section">
+                <label>Schlittenposition</label>
+                <div class="carriage-controls">
+                    <button class="carriage-button" id="carriage-left">◄ Links</button>
+                    <span class="carriage-position" id="carriage-position">0</span>
+                    <button class="carriage-button" id="carriage-right">Rechts ►</button>
+                </div>
+            </div>
+
+            <!-- Crank Handle -->
+            <div class="crank-section">
+                <label>Kurbel</label>
+                <div class="crank-controls">
+                    <button class="crank-button" id="crank-forward">↻ Vorwärts (1 Umdrehung)</button>
+                    <button class="crank-button" id="crank-backward">↺ Rückwärts (1 Umdrehung)</button>
+                </div>
+                <div class="crank-animation" id="crank-animation">
+                    <div class="crank-handle"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Algorithm Controls -->
+        <div class="algorithm-section">
+            <h2>Automatische Algorithmen</h2>
+            
+            <div class="algorithm-inputs">
+                <div class="input-group">
+                    <label>Operand A:</label>
+                    <input type="number" id="operand-a" value="0">
+                </div>
+                <div class="input-group">
+                    <label>Operand B:</label>
+                    <input type="number" id="operand-b" value="0">
+                </div>
+            </div>
+
+            <div class="algorithm-buttons">
+                <button class="algorithm-button" id="algo-add">Addition</button>
+                <button class="algorithm-button" id="algo-subtract">Subtraktion</button>
+                <button class="algorithm-button" id="algo-multiply">Multiplikation</button>
+                <button class="algorithm-button" id="algo-divide">Division</button>
+            </div>
+
+            <div class="playback-controls">
+                <button class="playback-button" id="play" disabled>▶ Abspielen</button>
+                <button class="playback-button" id="pause" disabled>⏸ Pause</button>
+                <button class="playback-button" id="step-back" disabled>⏮ Zurück</button>
+                <button class="playback-button" id="step-forward" disabled>⏭ Vorwärts</button>
+                <button class="playback-button" id="stop" disabled>⏹ Stop</button>
+            </div>
+
+            <div class="speed-control">
+                <label>Geschwindigkeit:</label>
+                <input type="range" id="speed" min="100" max="2000" value="1000" step="100">
+                <span id="speed-label">1000ms</span>
+            </div>
+
+            <div class="status-section">
+                <h3>Status</h3>
+                <div id="status-display">Bereit</div>
+            </div>
+
+            <div class="step-display">
+                <h3>Aktuelle Schritte</h3>
+                <div id="step-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="brunsviga.js"></script>
+</body>
+</html>
