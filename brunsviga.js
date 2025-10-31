@@ -87,7 +87,6 @@ class Brunsviga {
         document.getElementById('algo-subtract').addEventListener('click', () => this.startSubtraction());
         document.getElementById('algo-multiply').addEventListener('click', () => this.startMultiplication());
         document.getElementById('algo-divide').addEventListener('click', () => this.startDivision());
-        document.getElementById('algo-decimal-divide').addEventListener('click', () => this.startDecimalDivision());
         document.getElementById('algo-sqrt').addEventListener('click', () => this.startSquareRoot());
         
         // Playback controls
@@ -632,10 +631,6 @@ class Brunsviga {
                 this.setResultValue(step.value);
                 break;
 
-            case 'setResultDecimal':
-                this.setResultValue(step.value, { decimalPlaces: step.decimalPlaces });
-                break;
-
             case 'note':
                 break;
 
@@ -655,40 +650,6 @@ class Brunsviga {
         }
         
         this.updateDisplay();
-    }
-
-    parseDecimalInput(rawValue) {
-        if (typeof rawValue !== 'string') {
-            return null;
-        }
-
-        const normalized = rawValue.replace(',', '.').trim();
-
-        if (normalized.length === 0) {
-            return null;
-        }
-
-        const numericValue = Number(normalized);
-
-        if (Number.isNaN(numericValue)) {
-            return null;
-        }
-
-        const negative = numericValue < 0;
-        const absoluteString = negative ? normalized.slice(1) : normalized;
-        const parts = absoluteString.split('.');
-        const integerPart = parts[0].replace(/[^0-9]/g, '');
-        const fractionalPart = parts[1] ? parts[1].replace(/[^0-9]/g, '') : '';
-        const sanitizedInteger = integerPart.replace(/^0+(?=\d)/, '') || '0';
-        const digits = (sanitizedInteger + fractionalPart).replace(/^0+(?=\d)/, '') || '0';
-
-        return {
-            normalized,
-            number: numericValue,
-            negative,
-            digits,
-            decimals: fractionalPart.length
-        };
     }
 
     setInputValue(value) {
@@ -772,148 +733,6 @@ class Brunsviga {
         }
 
         this.updateDisplay();
-    }
-
-    startDecimalDivision() {
-        const rawDividend = document.getElementById('operand-a').value;
-        const rawDivisor = document.getElementById('operand-b').value;
-
-        const dividendInfo = this.parseDecimalInput(rawDividend);
-        const divisorInfo = this.parseDecimalInput(rawDivisor);
-
-        if (!dividendInfo || !divisorInfo) {
-            this.setStatus('Bitte gültige Zahlen eingeben.');
-            return;
-        }
-
-        if (divisorInfo.number === 0) {
-            this.setStatus('Division durch Null nicht möglich!');
-            return;
-        }
-
-        const decimalPlaces = 5;
-        const ten = 10n;
-        const dividendDigits = BigInt(dividendInfo.digits);
-        const divisorDigits = BigInt(divisorInfo.digits);
-
-        if (divisorDigits === 0n) {
-            this.setStatus('Division durch Null nicht möglich!');
-            return;
-        }
-
-        const numerator = dividendDigits * (ten ** BigInt(divisorInfo.decimals + decimalPlaces));
-        const denominator = divisorDigits * (ten ** BigInt(dividendInfo.decimals));
-
-        if (denominator === 0n) {
-            this.setStatus('Nicht durchführbar – zu viele Dezimalstellen.');
-            return;
-        }
-
-        let quotientAbsBigInt = numerator / denominator;
-
-        let quotientAbsStr = quotientAbsBigInt.toString();
-        if (quotientAbsStr.length <= decimalPlaces) {
-            quotientAbsStr = quotientAbsStr.padStart(decimalPlaces + 1, '0');
-        }
-
-        const integerDigitCount = quotientAbsStr.length - decimalPlaces;
-        const integerPartStr = quotientAbsStr.slice(0, integerDigitCount) || '0';
-        const fractionPartStr = quotientAbsStr.slice(integerDigitCount);
-        const quotientAbs = Number(`${integerPartStr}.${fractionPartStr}`);
-
-        const signNegative = (dividendInfo.number < 0) !== (divisorInfo.number < 0);
-        const quotientValue = signNegative ? -quotientAbs : quotientAbs;
-
-        let remainderValue = dividendInfo.number - divisorInfo.number * quotientValue;
-        remainderValue = Number.parseFloat(remainderValue.toFixed(decimalPlaces));
-        if (Object.is(remainderValue, -0)) {
-            remainderValue = 0;
-        }
-
-        const quotientDisplay = `${signNegative ? '-' : ''}${(integerPartStr || '0')}${decimalPlaces > 0 ? `.${fractionPartStr}` : ''}`;
-        const quotientDisplayGerman = quotientDisplay.replace('.', ',');
-        const remainderDisplay = remainderValue.toFixed(decimalPlaces).replace('.', ',');
-
-        const baseDifference = dividendInfo.decimals - divisorInfo.decimals;
-        const minimumDecimalDigits = Math.max(0, baseDifference);
-        const extraZeros = Math.max(0, decimalPlaces - minimumDecimalDigits);
-        const alignmentZeros = Math.max(0, divisorInfo.decimals - dividendInfo.decimals);
-
-        const stageDigits = quotientAbsStr.split('').map(d => parseInt(d, 10));
-        const manualStartPosition = 8;
-        const stageNotes = [];
-
-        stageDigits.forEach((digit, index) => {
-            const isDecimal = index >= integerDigitCount;
-            const stageNumber = index + 1;
-            const decimalIndex = stageNumber - integerDigitCount;
-            const position = manualStartPosition - index;
-
-            if (digit === 0) {
-                stageNotes.push(
-                    `Schlitten Stellung ${position}: Divisor passt nicht – Ergebnisziffer 0 und Schlitten eine Stelle nach links rücken${isDecimal ? ' (Dezimalstelle)' : ''}.`
-                );
-            } else {
-                stageNotes.push(
-                    `Schlitten Stellung ${position}: Divisor passt ${digit}-mal – ${digit} Rückwärtsdrehungen, Klingelzeichen, eine Vorwärtsdrehung und Schlitten nach links schieben${isDecimal ? ` (Dezimalstelle ${decimalIndex})` : ''}.`
-                );
-            }
-        });
-
-        this.algorithmSteps = [];
-        this.algorithmSteps.push({ action: 'clearAll', description: 'Alle Register löschen' });
-
-        const { steps: moveRightSteps } = this.createCarriageMovementSteps(0, 6);
-        moveRightSteps.forEach(step => this.algorithmSteps.push(step));
-
-        this.algorithmSteps.push({
-            action: 'note',
-            description: `Dividend ${dividendInfo.normalized.replace('.', ',')} in Stellung 8 übernehmen und durch eine Vorwärtsdrehung in das Resultatwerk übertragen.`
-        });
-
-        this.algorithmSteps.push({ action: 'clearInput', description: 'Einstellwerk leeren (E-Werk löschen)' });
-        this.algorithmSteps.push({ action: 'clearRevolution', description: 'Umdrehungszähler zurücksetzen' });
-
-        this.algorithmSteps.push({
-            action: 'note',
-            description: `Divisor ${divisorInfo.normalized.replace('.', ',')} im Einstellwerk so ausrichten, dass seine höchste Stelle unter der führenden Stelle des Dividenden steht.`
-        });
-
-        let komaText;
-        if (baseDifference >= 0) {
-            komaText = `Dezimalstellen: Dividend ${dividendInfo.decimals}, Divisor ${divisorInfo.decimals} ⇒ Differenz ${baseDifference}. Für ${decimalPlaces} Dezimalstellen im Ergebnis werden zusätzlich ${extraZeros} Nullen an den Dividend angehängt.`;
-        } else {
-            komaText = `Divisor besitzt ${divisorInfo.decimals} Dezimalstellen mehr als der Dividend. Deshalb zuerst ${alignmentZeros} Nullen beim Dividend ergänzen und anschließend auf ${decimalPlaces} Dezimalstellen im Ergebnis erweitern.`;
-        }
-
-        this.algorithmSteps.push({ action: 'note', description: `Komma-Regel beachten: ${komaText}` });
-
-        stageNotes.forEach(note => {
-            this.algorithmSteps.push({ action: 'note', description: note });
-        });
-
-        if (signNegative) {
-            this.algorithmSteps.push({ action: 'note', description: 'Negatives Ergebnis – Vorzeichen gesondert notieren.' });
-        }
-
-        this.algorithmSteps.push({
-            action: 'setResultDecimal',
-            value: Math.abs(quotientValue),
-            decimalPlaces,
-            description: `Quotientenwert ${quotientDisplayGerman} im Resultatwerk einstellen.`
-        });
-
-        this.algorithmSteps.push({
-            action: 'note',
-            description: `Rest nach ${decimalPlaces} Dezimalstellen: ${remainderDisplay}`
-        });
-
-        this.algorithmSteps.push({
-            action: 'complete',
-            description: `Division abgeschlossen: Quotient=${quotientDisplayGerman}, Rest=${remainderDisplay}`
-        });
-
-        this.prepareAlgorithm();
     }
 
     startSquareRoot() {
